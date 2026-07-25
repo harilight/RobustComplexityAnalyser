@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robust Complexity Analyzer</title>
+    <link rel="stylesheet" href="index.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>Complexity Analyzer Engine</h1>
+            </div>
+            <button class="btn-primary" id="analyze-btn">Analyze Code</button>
+        </header>
+
+        <main class="main-content">
+            <section class="editor-section panel">
+                <div class="panel-header">
+                    <h2>Input Code</h2>
+                    <div class="controls" style="display: flex; gap: 10px;">
+                        <select id="language-select" class="dropdown">
+                            <option value="python">Python</option>
+                            <option value="javascript">JavaScript</option>
+                        </select>
+                        <select id="generator-select" class="dropdown">
+                            <option value="auto">Auto-Detect (Blueprint Precedence)</option>
+                            <option value="random">Random Arrays</option>
+                            <option value="target_at_start">Target at Start (Best Case)</option>
+                            <option value="target_absent">Target Absent (Worst Case)</option>
+                            <option value="fib_arg">Integer (Recursion)</option>
+                            <option value="binary_tree">Binary Tree</option>
+                            <option value="linked_list">Linked List</option>
+                            <option value="graph_adj_list">Graph (Adjacency List)</option>
+                            <option value="matrix">Matrix (2D Grid)</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea id="code-input" class="code-editor" spellcheck="false">
+def example(arr):
+    # Category A Trap Example
+    for x in arr:
+        if x in arr:
+            print("Found it!")
+    return True
+</textarea>
+            </section>
+
+            <section class="results-section panel">
+                <div class="panel-header">
+                    <h2>Analysis Results</h2>
+                </div>
+                
+                <div class="results-content" id="results-content">
+                    <div class="empty-state">
+                        <p>Click "Analyze Code" to evaluate Big-O complexity.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

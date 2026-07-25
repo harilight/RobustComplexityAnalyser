@@ -1,0 +1,93 @@
+[
+  {
+    "id": "single_loop_py",
+    "language": "python",
+    "code": "def example(arr):\n    count = 0\n    for x in arr:\n        count += 1\n    return count",
+    "expected_time": "O(n)",
+    "tags": ["standard", "single-loop"]
+  },
+  {
+    "id": "nested_loop_py",
+    "language": "python",
+    "code": "def example(arr):\n    count = 0\n    for x in arr:\n        for y in arr:\n            count += 1\n    return count",
+    "expected_time": "O(n^2)",
+    "tags": ["standard", "nested-loop"]
+  },
+  {
+    "id": "cat_a_in_list_py",
+    "language": "python",
+    "code": "def example(arr, queries):\n    # Category A: x in list is O(n) assuming arr is a list\n    res = []\n    for q in queries:\n        if q in arr:\n            res.append(q)\n    return res",
+    "expected_time": "O(n^2)",
+    "tags": ["category-a", "builtin-hidden-loop"],
+    "generators": {
+      "random": "O(n)"
+    }
+  },
+  {
+    "id": "cat_c_append_py",
+    "language": "python",
+    "code": "def example(arr):\n    # Category C: list.append is amortized O(1), loop is O(n), total O(n)\n    res = []\n    for x in arr:\n        res.append(x)\n    return res",
+    "expected_time": "O(n)",
+    "tags": ["category-c", "amortized-cost"]
+  },
+  {
+    "id": "single_loop_js",
+    "language": "javascript",
+    "code": "function example(arr) {\n    let count = 0;\n    for (let i = 0; i < arr.length; i++) {\n        count++;\n    }\n    return count;\n}",
+    "expected_time": "O(n)",
+    "tags": ["standard", "single-loop"]
+  },
+  {
+    "id": "cat_b_hof_chain_js",
+    "language": "javascript",
+    "code": "function example(arr) {\n    // Sequential HOFs: O(n) + O(n) = O(n)\n    return arr.map(x => x * 2).filter(x => x > 10);\n}",
+    "expected_time": "O(n)",
+    "tags": ["category-b", "hof-chain", "sequential"]
+  },
+  {
+    "id": "cat_b_nested_hof_js",
+    "language": "javascript",
+    "code": "function example(arr) {\n    // Nested HOFs: arr.map calls arr.filter inside the callback -> O(n^2)\n    return arr.map(x => arr.filter(y => y > x));\n}",
+    "expected_time": "O(n^2)",
+    "tags": ["category-b", "nested-hof"]
+  },
+  {
+    "id": "cat_a_includes_js",
+    "language": "javascript",
+    "code": "function example(arr, queries) {\n    // Category A: arr.includes is O(n) inside an O(n) map -> O(n^2)\n    return queries.map(q => arr.includes(q));\n}",
+    "expected_time": "O(n^2)",
+    "tags": ["category-a", "builtin-hidden-loop"]
+  },
+  {
+    "id": "cat_d_early_return_py",
+    "language": "python",
+    "code": "def example(arr, target):\n    for x in arr:\n        if x == target:\n            return True\n    return False",
+    "expected_time": "O(n)",
+    "tags": ["category-d", "early-return"],
+    "generators": {
+      "target_at_start": "O(1)",
+      "random_with_target": "O(n)",
+      "target_absent": "O(n)"
+    }
+  },
+  {
+    "id": "cat_e_naive_fib_py",
+    "language": "python",
+    "code": "def example(n):\n    if n <= 1: return n\n    return example(n-1) + example(n-2)",
+    "expected_time": "O(2^n)",
+    "tags": ["category-e", "recursion"],
+    "generators": {
+      "fib_arg": "O(2^n)"
+    }
+  },
+  {
+    "id": "cat_e_memo_fib_py",
+    "language": "python",
+    "code": "from functools import cache\n\n@cache\ndef example(n):\n    if n <= 1: return n\n    return example(n-1) + example(n-2)",
+    "expected_time": "O(n)",
+    "tags": ["category-e", "recursion", "memoized"],
+    "generators": {
+      "fib_arg": "O(n)"
+    }
+  }
+]
