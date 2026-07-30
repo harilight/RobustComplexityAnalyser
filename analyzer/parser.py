@@ -287,6 +287,7 @@ def parse_python(code: str) -> FunctionNode:
     func_def = None
     decorators = []
     
+    class_methods = {}
     def extract_func(node):
         nonlocal func_def
         name = _get_child_by_type(node, 'identifier')
@@ -313,8 +314,10 @@ def parse_python(code: str) -> FunctionNode:
                         if m.type == 'function_definition':
                             m_name = _get_child_by_type(m, 'identifier')
                             if m_name and not m_name.text.decode('utf8').startswith('__'):
-                                func_def = m
-                                break
+                                name_text = m_name.text.decode('utf8')
+                                class_methods[name_text] = m
+                                if not func_def:
+                                    func_def = m
                                 
     if not func_def:
         raise ValueError("No function definition found")
@@ -423,7 +426,7 @@ def parse_python(code: str) -> FunctionNode:
     func_node.inferred_signature = infer_signature(params, accessed_attributes, string_literals)
     
     if body:
-        func_node.body = _traverse_block(body, body, params, accessed_attributes, dict_vars, False, string_vars)
+        func_node.body = _traverse_block(body, body, params, accessed_attributes, dict_vars, False, string_vars, func_name, class_methods, [func_name])
         
         branch_factor, is_factorial, _, _ = get_recursive_calls(body, func_name)
 
@@ -442,12 +445,14 @@ def _get_child_by_type(node, node_type):
             return child
     return None
 
-def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, accessed_attributes=None, dict_vars=None, in_loop=False, string_vars=None) -> list[IRNode]:
+def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, accessed_attributes=None, dict_vars=None, in_loop=False, string_vars=None, current_func_name="unknown", class_methods=None, parse_stack=None) -> list[IRNode]:
     nodes = []
     if not params: params = []
     if not accessed_attributes: accessed_attributes = set()
     if not dict_vars: dict_vars = set()
     if not string_vars: string_vars = set()
+    if class_methods is None: class_methods = {}
+    if parse_stack is None: parse_stack = []
     
     if not hasattr(block_node, 'children'):
         return nodes
@@ -458,9 +463,9 @@ def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, acces
             loop = LoopNode(bound_type=btype, bound_value=bval)
             loop_body = _get_child_by_type(child, 'block')
             if loop_body:
-                loop.body = _traverse_block(loop_body, loop_body, params, accessed_attributes, dict_vars, True, string_vars)
+                loop.body = _traverse_block(loop_body, loop_body, params, accessed_attributes, dict_vars, True, string_vars, current_func_name, class_methods, parse_stack)
             else:
-                loop.body = _find_operations(child, params, accessed_attributes, dict_vars, string_vars)
+                loop.body = _find_operations(child, params, accessed_attributes, dict_vars, string_vars, current_func_name, class_methods, parse_stack)
             nodes.append(loop)
         elif child.type == 'function_definition':
             inner_name = _get_child_by_type(child, 'identifier')
@@ -468,7 +473,7 @@ def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, acces
             
             inner_block = _get_child_by_type(child, 'block')
             if inner_block:
-                inner_nodes = _traverse_block(inner_block, inner_block, params, accessed_attributes, dict_vars, False, string_vars)
+                inner_nodes = _traverse_block(inner_block, inner_block, params, accessed_attributes, dict_vars, False, string_vars, inner_func_name, class_methods, parse_stack + [inner_func_name])
                 branch, is_fac, _, _ = get_recursive_calls(inner_block, inner_func_name)
                 inner_memoized = False
                 def check_inner_memo(n):
@@ -500,33 +505,39 @@ def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, acces
                     inner_reduction = 'halving' if _calls_use_halving_arg(inner_block, inner_func_name) else 'unknown'
                     inner_nodes.append(RecursiveCallNode(branch_factor=branch, is_memoized=inner_memoized, arg_reduction=inner_reduction, is_factorial=is_fac, dp_dimension=inner_dp_dimension))
                 nodes.extend(inner_nodes)
+        elif child.type in ('list_comprehension', 'set_comprehension', 'dictionary_comprehension', 'generator_expression'):
+            loop = LoopNode(bound_type='linear', bound_value=None)
+            loop.body = _traverse_block(child, child, params, accessed_attributes, dict_vars, True, string_vars, current_func_name, class_methods, parse_stack)
+            nodes.append(loop)
         elif child.type == 'if_statement':
             branch_node = BranchNode(branches=[])
             cons = _get_child_by_type(child, 'block')
             if cons:
-                branch_node.branches.append(_traverse_block(cons, enclosing_block_ts_node, params, accessed_attributes, dict_vars, in_loop, string_vars))
+                branch_node.branches.append(_traverse_block(cons, enclosing_block_ts_node, params, accessed_attributes, dict_vars, in_loop, string_vars, current_func_name, class_methods, parse_stack))
             for sub_child in child.children:
                 if sub_child.type in ('elif_clause', 'else_clause'):
                     alt = _get_child_by_type(sub_child, 'block')
                     if alt:
-                        branch_node.branches.append(_traverse_block(alt, enclosing_block_ts_node, params, accessed_attributes, dict_vars, in_loop, string_vars))
+                        branch_node.branches.append(_traverse_block(alt, enclosing_block_ts_node, params, accessed_attributes, dict_vars, in_loop, string_vars, current_func_name, class_methods, parse_stack))
             nodes.append(branch_node)
             for sub_child in child.children:
                 if sub_child.type not in ('block', 'elif_clause', 'else_clause'):
-                    nodes.extend(_find_operations(sub_child, params, accessed_attributes, dict_vars, string_vars))
+                    nodes.extend(_find_operations(sub_child, params, accessed_attributes, dict_vars, string_vars, current_func_name, class_methods, parse_stack))
         elif child.type in ('try_statement', 'with_statement', 'block', 'elif_clause', 'else_clause', 'except_clause', 'finally_clause'):
-            nodes.extend(_traverse_block(child, enclosing_block_ts_node, params, accessed_attributes, dict_vars, in_loop, string_vars))
+            nodes.extend(_traverse_block(child, enclosing_block_ts_node, params, accessed_attributes, dict_vars, in_loop, string_vars, current_func_name, class_methods, parse_stack))
         else:
-            nodes.extend(_find_operations(child, params, accessed_attributes, dict_vars, string_vars))
+            nodes.extend(_find_operations(child, params, accessed_attributes, dict_vars, string_vars, current_func_name, class_methods, parse_stack))
             
     return nodes
 
-def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None, string_vars=None) -> list[IRNode]:
+def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None, string_vars=None, current_func_name="unknown", class_methods=None, parse_stack=None) -> list[IRNode]:
     nodes = []
     if params is None: params = []
     if accessed_attributes is None: accessed_attributes = set()
     if dict_vars is None: dict_vars = set()
     if string_vars is None: string_vars = set()
+    if class_methods is None: class_methods = {}
+    if parse_stack is None: parse_stack = []
     
     if not hasattr(node, 'type'):
         return nodes
@@ -561,7 +572,45 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
     elif node.type == 'call':
         func = node.children[0]
         if func.type == 'attribute':
-            attr_name = func.children[2].text.decode('utf8')
+            obj = func.children[0]
+            attr = func.children[2]
+            
+            if obj.type == 'identifier' and attr.type == 'identifier':
+                obj_name = obj.text.decode('utf8')
+                attr_name = attr.text.decode('utf8')
+                if obj_name == 'self' and attr_name in class_methods:
+                    if attr_name == current_func_name:
+                        pass # standard self-recursion, handled by branch_factor logic
+                    elif attr_name in parse_stack:
+                        # Mutual recursion fallback
+                        nodes.append(RecursiveCallNode(branch_factor=1, dp_dimension=1))
+                    else:
+                        # Inline interprocedural helper!
+                        target_ast = class_methods[attr_name]
+                        target_block = _get_child_by_type(target_ast, 'block')
+                        
+                        t_params = []
+                        t_param_node = _get_child_by_type(target_ast, 'parameters')
+                        if t_param_node:
+                            for p in t_param_node.children:
+                                if p.type not in ('(', ')', ','):
+                                    t_p_name = p.text.decode('utf8') if p.type == 'identifier' else _get_child_by_type(p, 'identifier').text.decode('utf8') if _get_child_by_type(p, 'identifier') else None
+                                    if t_p_name and t_p_name != 'self':
+                                        t_params.append(t_p_name)
+                                        
+                        if target_block:
+                            parse_stack.append(attr_name)
+                            inlined = _traverse_block(target_block, target_block, t_params, accessed_attributes, dict_vars, False, string_vars, attr_name, class_methods, parse_stack)
+                            parse_stack.pop()
+                            
+                            branch, is_fac, _, _ = get_recursive_calls(target_block, attr_name)
+                            if branch > 0:
+                                t_dp_dim = len(t_params) if t_params else 1
+                                inlined.append(RecursiveCallNode(branch_factor=branch, is_memoized=False, arg_reduction='unknown', is_factorial=is_fac, dp_dimension=t_dp_dim))
+                            nodes.extend(inlined)
+                            return nodes
+                            
+            attr_name = attr.text.decode('utf8')
             if attr_name == 'append':
                 nodes.append(DataStructureOpNode(structure_type='list', op='append', position='back'))
             elif attr_name == 'pop':
@@ -571,6 +620,8 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
                 else:
                     nodes.append(DataStructureOpNode(structure_type='list', op='pop', position='back'))
             elif attr_name in ('popleft', 'sort', 'split', 'join', 'replace', 'index', 'count'):
+                nodes.append(BuiltinCallNode(name=attr_name))
+            elif attr_name in ('heappush', 'heappop'):
                 nodes.append(BuiltinCallNode(name=attr_name))
         elif func.type == 'identifier':
             func_name = func.text.decode('utf8')
@@ -584,7 +635,13 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
             elif func_name in ('sorted', 'sum', 'all', 'any', 'heappush', 'heappop'):
                 nodes.append(BuiltinCallNode(name=func_name))
                 
+    if node.type in ('list_comprehension', 'set_comprehension', 'dictionary_comprehension', 'generator_expression'):
+        loop = LoopNode(bound_type='linear', bound_value=None)
+        loop.body = _traverse_block(node, node, params, accessed_attributes, dict_vars, True, string_vars, current_func_name, class_methods, parse_stack)
+        nodes.append(loop)
+        return nodes
+                
     for child in node.children:
-        nodes.extend(_find_operations(child, params, accessed_attributes, dict_vars, string_vars))
+        nodes.extend(_find_operations(child, params, accessed_attributes, dict_vars, string_vars, current_func_name, class_methods, parse_stack))
         
     return nodes
