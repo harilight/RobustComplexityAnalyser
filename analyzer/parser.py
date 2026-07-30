@@ -113,6 +113,54 @@ def _detect_loop_bound_type(loop_ts_node, enclosing_block_ts_node=None, is_inner
             if any(c not in resets for c in candidates):
                 return 'amortized', None
 
+    if loop_ts_node.type == 'while_statement':
+        has_queue_pop = False
+        queue_vars = set()
+        def find_queue_pop(n):
+            nonlocal has_queue_pop
+            if not hasattr(n, 'type'): return
+            if n.type == 'call':
+                func = _get_child_by_type(n, 'attribute')
+                if func and len(func.children) >= 3:
+                    obj = func.children[0]
+                    attr = func.children[2]
+                    if attr.type == 'identifier' and attr.text.decode('utf8') in ('popleft', 'pop'):
+                        if obj.type == 'identifier':
+                            has_queue_pop = True
+                            queue_vars.add(obj.text.decode('utf8'))
+            for c in getattr(n, 'children', []):
+                find_queue_pop(c)
+        find_queue_pop(block)
+        
+        if has_queue_pop and any(qv in cond_vars for qv in queue_vars):
+            for c in getattr(block, 'children', []):
+                if c.type in ('for_statement', 'while_statement'):
+                    inner_has_append = False
+                    inner_has_add = False
+                    inner_has_remove = False
+                    def check_bfs_inner(n):
+                        nonlocal inner_has_append, inner_has_add, inner_has_remove
+                        if not hasattr(n, 'type'): return
+                        if n.type == 'call' and getattr(n, 'children', []):
+                            func = n.children[0]
+                            if func.type == 'attribute' and len(func.children) >= 3:
+                                obj = func.children[0]
+                                attr = func.children[2]
+                                if obj.type == 'identifier' and attr.type == 'identifier':
+                                    obj_name = obj.text.decode('utf8')
+                                    attr_name = attr.text.decode('utf8')
+                                    if attr_name == 'append' and obj_name in queue_vars:
+                                        inner_has_append = True
+                                    elif attr_name == 'add':
+                                        inner_has_add = True
+                                    elif attr_name in ('remove', 'discard'):
+                                        inner_has_remove = True
+                        for ch in getattr(n, 'children', []):
+                            check_bfs_inner(ch)
+                    check_bfs_inner(c)
+                    if inner_has_append and inner_has_add and not inner_has_remove:
+                        return 'amortized', None
+
     return 'linear', None
 
 def _find_midpoint_vars(node) -> set:
@@ -148,6 +196,51 @@ def _calls_use_halving_arg(node, func_name: str, midpoint_vars: set = None) -> b
         if _calls_use_halving_arg(c, func_name, midpoint_vars):
             return True
     return False
+
+def check_memo(node, dict_vars):
+    memo_vars = set()
+    def find_memo_vars(n):
+        if not hasattr(n, 'type'): return
+        if n.type == 'comparison_operator':
+            for i, comp_c in enumerate(n.children):
+                if comp_c.type == 'in':
+                    right_operand = n.children[i+1] if i+1 < len(n.children) else None
+                    if right_operand and right_operand.type == 'identifier':
+                        var_name = right_operand.text.decode('utf8')
+                        if var_name in dict_vars or 'memo' in var_name.lower() or 'cache' in var_name.lower() or 'dp' in var_name.lower() or 'visit' in var_name.lower() or 'path' in var_name.lower():
+                            memo_vars.add(var_name)
+        elif n.type == 'assignment':
+            left = n.children[0]
+            if left.type == 'subscript':
+                obj = left.children[0] if left.children else None
+                if obj and obj.type == 'identifier':
+                    var_name = obj.text.decode('utf8')
+                    if var_name in dict_vars or 'memo' in var_name.lower() or 'cache' in var_name.lower() or 'dp' in var_name.lower():
+                        memo_vars.add(var_name)
+        for child in getattr(n, 'children', []):
+            find_memo_vars(child)
+            
+    find_memo_vars(node)
+    
+    removed_vars = set()
+    def find_removes(n):
+        if not hasattr(n, 'type'): return
+        if n.type == 'call':
+            func = n.children[0]
+            if func.type == 'attribute':
+                obj = func.children[0]
+                attr = func.children[2]
+                if obj.type == 'identifier' and attr.type == 'identifier':
+                    obj_name = obj.text.decode('utf8')
+                    attr_name = attr.text.decode('utf8')
+                    if obj_name in memo_vars and attr_name in ('remove', 'discard', 'pop'):
+                        removed_vars.add(obj_name)
+        for child in getattr(n, 'children', []):
+            find_removes(child)
+            
+    find_removes(node)
+    
+    return any(mv not in removed_vars for mv in memo_vars)
 
 def get_recursive_calls(node, func_name: str, in_variable_loop: bool = False) -> tuple[int, bool, bool, bool]:
     # Returns: (bf, isf, rft, ft)
@@ -402,25 +495,9 @@ def parse_python(code: str) -> FunctionNode:
             break
             
     if not is_memoized:
-        def check_manual_memo(n):
-            nonlocal is_memoized
-            if not hasattr(n, 'type'): return
-            if n.type == 'if_statement':
-                for c in n.children:
-                    if c.type == 'comparison_operator':
-                        for i, comp_c in enumerate(c.children):
-                            if comp_c.type == 'in':
-                                right_operand = c.children[i+1] if i+1 < len(c.children) else None
-                                if right_operand and right_operand.type == 'identifier':
-                                    var_name = right_operand.text.decode('utf8')
-                                    if var_name in dict_vars or 'memo' in var_name.lower() or 'cache' in var_name.lower() or 'dp' in var_name.lower():
-                                        is_memoized = True
-                                        return
-            for child in getattr(n, 'children', []):
-                check_manual_memo(child)
-        body = _get_child_by_type(func_def, 'block')
-        if func_def:
-            check_manual_memo(func_def)
+        is_memoized = check_memo(func_def, dict_vars) if func_def else False
+        
+    body = _get_child_by_type(func_def, 'block') if func_def else None
             
     from .inference import infer_signature
     func_node.inferred_signature = infer_signature(params, accessed_attributes, string_literals)
@@ -475,24 +552,7 @@ def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, acces
             if inner_block:
                 inner_nodes = _traverse_block(inner_block, inner_block, params, accessed_attributes, dict_vars, False, string_vars, inner_func_name, class_methods, parse_stack + [inner_func_name])
                 branch, is_fac, _, _ = get_recursive_calls(inner_block, inner_func_name)
-                inner_memoized = False
-                def check_inner_memo(n):
-                    nonlocal inner_memoized
-                    if not hasattr(n, 'type'): return
-                    if n.type == 'if_statement':
-                        for c in n.children:
-                            if c.type == 'comparison_operator':
-                                for i, comp_c in enumerate(c.children):
-                                    if comp_c.type == 'in':
-                                        right_operand = c.children[i+1] if i+1 < len(c.children) else None
-                                        if right_operand and right_operand.type == 'identifier':
-                                            var_name = right_operand.text.decode('utf8')
-                                            if var_name in dict_vars or 'memo' in var_name.lower() or 'cache' in var_name.lower() or 'dp' in var_name.lower():
-                                                inner_memoized = True
-                                                return
-                    for c in getattr(n, 'children', []):
-                        check_inner_memo(c)
-                check_inner_memo(inner_block)
+                inner_memoized = check_memo(child, dict_vars)
                 inner_params = []
                 inner_params_node = _get_child_by_type(child, 'parameters')
                 if inner_params_node:
