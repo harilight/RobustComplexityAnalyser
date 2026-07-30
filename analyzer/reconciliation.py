@@ -53,10 +53,21 @@ def reconcile(static_result: str, dynamic_results: Dict[str, Dict[str, Any]], ta
             "reasoning": "Static and dynamic analysis perfectly match."
         }
         
-    # Complexity ordering to compare "lower" vs "higher"
-    order = {"O(1)": 1, "O(log n)": 2, "O(n)": 3, "O(n log n)": 4, "O(n^2)": 5, "O(2^n)": 6}
-    static_val = order.get(static_result, 0)
-    dyn_val = order.get(dyn_fit, 0)
+    import re
+    def get_order(c_str):
+        if c_str == "O(1)": return 1
+        if c_str == "O(log n)": return 2
+        if c_str == "O(n)": return 3
+        if c_str == "O(n log n)": return 4
+        m_poly = re.search(r'O\(n\^([\d.]+)\)', c_str)
+        if m_poly: return 4 + float(m_poly.group(1))
+        m_exp = re.search(r'O\(([\d.]+)\^n\)', c_str)
+        if m_exp: return 1000 + float(m_exp.group(1))
+        if c_str == "O(n!)": return 10000
+        return 0
+        
+    static_val = get_order(static_result)
+    dyn_val = get_order(dyn_fit)
     
     # Rule 3: Static > Dynamic
     if static_val > dyn_val:

@@ -28,12 +28,29 @@ def run_in_sandbox(func_code: str, generator_name: str | dict, n: int, trials: i
     # In a real sandbox, we'd use a whitelist. For this MVP, we explicitly allow these two.
     import functools
     import math
+    import typing
     env['functools'] = functools
     env['math'] = math
+    env['typing'] = typing
+    for k, v in typing.__dict__.items():
+        if not k.startswith('_'):
+            env[k] = v
     
     try:
         exec(func_code, env)
-        func = env[func_name]
+        
+        if func_name in env:
+            func = env[func_name]
+        else:
+            found = False
+            for k, v in env.items():
+                if isinstance(v, type) and hasattr(v, func_name):
+                    instance = v()
+                    func = getattr(instance, func_name)
+                    found = True
+                    break
+            if not found:
+                raise KeyError(func_name)
         
         from .profiler import count_operations, generators, gen_random, gen_random_two_args, gen_multi_args
         if isinstance(generator_name, dict):
@@ -49,8 +66,8 @@ def run_in_sandbox(func_code: str, generator_name: str | dict, n: int, trials: i
             try:
                 args = args_gen(n)
                 total_count += count_operations(func, args)
-            except TypeError:
-                if generator_name == 'random':
+            except TypeError as e:
+                if generator_name == 'random' and ('positional argument' in str(e) or 'takes' in str(e)):
                     args = gen_random_two_args(n)
                     total_count += count_operations(func, args)
                 else:

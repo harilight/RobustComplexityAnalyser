@@ -24,7 +24,10 @@ def infer_signature(params: list[str], accessed_attributes: set[str], string_lit
             sig[p] = 'matrix'
             main_structure = 'matrix'
         elif p_lower in ('target', 'val', 'k', 'n', 'x', 'y', 'amount', 'size', 'num'):
-            sig[p] = 'size_int'
+            if p_lower in ('n', 'k') and 'fib' in "".join(accessed_attributes):
+                sig[p] = 'small_integer'
+            else:
+                sig[p] = 'size_int'
         elif p_lower in ('s', 'text', 'word', 'string'):
             if string_literals:
                 sig[p] = {'type': 'scalar_string', 'alphabet': list(string_literals)}

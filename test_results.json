@@ -1,0 +1,91 @@
+{
+  "Word Break (Memoized DFS)": {
+    "error": "Solution.wordBreak() missing 1 required positional argument: 'wordDict'"
+  },
+  "Valid Number": {
+    "error": "'int' object has no attribute 'isdigit'"
+  },
+  "Integer to Roman": {
+    "error": "'>' not supported between instances of 'list' and 'int'"
+  },
+  "Longest Substring (Sliding Window)": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Minimum Size Subarray Sum": {
+    "static": "O(n)",
+    "dynamic": "O(log n)",
+    "verdict": "O(n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n)) > Dynamic (O(log n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Trapping Rain Water (Two Pointers)": {
+    "static": "O(n^2)",
+    "dynamic": "O(n)",
+    "verdict": "O(n^2)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n^2)) > Dynamic (O(n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Fibonacci Number (Naive)": {
+    "static": "O(1)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(1)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Dynamic (O(2^n)) > Static (O(1)), but dynamic fit is noisy. Trusting static."
+  },
+  "Climbing Stairs (Double Branch Memoized)": {
+    "static": "O(1)",
+    "dynamic": "O(log n)",
+    "verdict": "O(log n)",
+    "confidence": "MEDIUM",
+    "reasoning": "Mismatch: Dynamic (O(log n)) > Static (O(1)). Decisive fit indicates hidden overhead missed by static analysis."
+  },
+  "Target Sum": {
+    "static": "O(2^n)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(2^n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Sudoku Solver": {
+    "static": "O(9^n)",
+    "dynamic": "O(1)",
+    "verdict": "O(9^n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(9^n)) > Dynamic (O(1)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Contains Duplicate (List in loop)": {
+    "static": "O(n^2)",
+    "dynamic": "O(log n)",
+    "verdict": "O(n^2)",
+    "confidence": "MEDIUM",
+    "reasoning": "Mismatch: Hidden C-Level Operations Detected. Trusting static (O(n^2)) over dynamic (O(log n))."
+  },
+  "Intersection of Two Arrays (Naive)": {
+    "static": "O(n^2)",
+    "dynamic": "O(n)",
+    "verdict": "O(n^2)",
+    "confidence": "MEDIUM",
+    "reasoning": "Mismatch: Hidden C-Level Operations Detected. Trusting static (O(n^2)) over dynamic (O(n))."
+  },
+  "Two Sum (Optimal)": {
+    "static": "O(n)",
+    "dynamic": "O(log n)",
+    "verdict": "O(n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n)) > Dynamic (O(log n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Longest Palindromic Substring (Expand Around Center)": {
+    "static": "O(n^2)",
+    "dynamic": "O(n)",
+    "verdict": "O(n^2)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n^2)) > Dynamic (O(n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Add Binary (String Accumulation)": {
+    "error": "invalid literal for int() with base 10: 'q'"
+  }
+}

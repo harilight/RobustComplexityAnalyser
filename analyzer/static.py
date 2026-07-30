@@ -1,4 +1,4 @@
-from .ir import FunctionNode, LoopNode, BuiltinCallNode, DataStructureOpNode, IRNode, RecursiveCallNode
+from .ir import FunctionNode, LoopNode, BuiltinCallNode, DataStructureOpNode, IRNode, RecursiveCallNode, BranchNode, StringConcatNode
 from .rules import get_op_complexity
 
 def analyze_complexity(func_node: FunctionNode) -> dict:
@@ -6,7 +6,12 @@ def analyze_complexity(func_node: FunctionNode) -> dict:
     tags = set()
     max_power = _analyze_block(func_node.body, tags)
     
-    if max_power >= 999:
+    if max_power >= 9999:
+        c = "O(n!)"
+    elif max_power > 1000:
+        base = max_power - 1000
+        c = f"O({base}^n)"
+    elif max_power >= 999:
         c = "O(2^n)"
     elif max_power == 0:
         c = "O(1)"
@@ -25,10 +30,21 @@ def _analyze_block(nodes: list[IRNode], tags: set) -> int:
     for node in nodes:
         power = 0
         if isinstance(node, LoopNode):
-            # linear loop adds 1 to the power
             body_power = _analyze_block(node.body, tags)
-            power = 1 + body_power
-        elif isinstance(node, BuiltinCallNode) or isinstance(node, DataStructureOpNode) or isinstance(node, RecursiveCallNode):
+            loop_power = 1
+            if node.bound_type == 'log':
+                loop_power = 0.5
+            elif node.bound_type in ('amortized', 'const'):
+                loop_power = 0
+            power = loop_power + body_power
+        elif isinstance(node, BranchNode):
+            branch_max = 0
+            for b in node.branches:
+                b_pow = _analyze_block(b, tags)
+                if b_pow > branch_max:
+                    branch_max = b_pow
+            power = branch_max
+        elif isinstance(node, BuiltinCallNode) or isinstance(node, DataStructureOpNode) or isinstance(node, RecursiveCallNode) or isinstance(node, StringConcatNode):
             power, tag = get_op_complexity(node)
             if tag:
                 tags.add(tag)

@@ -17,12 +17,16 @@ class FunctionNode(IRNode):
 @dataclass
 class LoopNode(IRNode):
     bound_type: str  # 'linear', 'log', 'sqrt', 'const'
+    bound_value: Optional[str] = None
     body: List[IRNode] = field(default_factory=list)
 
 @dataclass
 class RecursiveCallNode(IRNode):
     branch_factor: int
     is_memoized: bool
+    arg_reduction: str = "unknown"
+    is_factorial: bool = False
+    dp_dimension: int = 1
 
 @dataclass
 class BuiltinCallNode(IRNode):
@@ -40,3 +44,11 @@ class DataStructureOpNode(IRNode):
 class AllocationNode(IRNode):
     size_expr: str
     location: str
+
+@dataclass
+class BranchNode(IRNode):
+    branches: List[List[IRNode]] = field(default_factory=list)
+
+@dataclass
+class StringConcatNode(IRNode):
+    pass

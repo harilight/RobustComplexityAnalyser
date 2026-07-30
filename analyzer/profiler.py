@@ -68,6 +68,8 @@ generators = {
     'random_with_target': gen_random_with_target,
     'target_absent': lambda size: ([random.randint(1, 1000) for _ in range(size)], -1),
     'fib_arg': lambda size: (size,),
+    'small_integer': lambda size: (size,),
+    'queens': lambda size: (size,),
     'binary_tree': gen_binary_tree,
     'linked_list': gen_linked_list,
     'graph_adj_list': gen_graph_adj_list,
@@ -84,6 +86,8 @@ def get_generator_for_type(type_name: str | dict, size: int) -> Any:
     if type_name == 'scalar_int':
         return random.randint(1, 1000)
     elif type_name == 'size_int':
+        return size
+    elif type_name == 'small_integer':
         return size
     elif type_name == 'scalar_float':
         return random.uniform(1.0, 1000.0)
@@ -104,7 +108,9 @@ def get_generator_for_type(type_name: str | dict, size: int) -> Any:
     elif type_name == '1d_array_reverse':
         return sorted(random.sample(range(1, max(1000, size * 10)), size), reverse=True)
     elif type_name == '1d_string_array':
-        return [f"word{i}" for i in range(size)]
+        return [chr(97 + (i % 26)) for i in range(size)]
+    elif type_name == 'flag_2':
+        return 2
     elif type_name in ('2d_matrix', 'matrix'):
         return gen_matrix(size)[0]
     elif type_name in ('linked_list_singly', 'linked_list'):
@@ -214,7 +220,8 @@ def fit_curves(N_values: List[int], op_counts: List[int]) -> Dict[str, Any]:
         ("O(n)", lambda n: n),
         ("O(n log n)", lambda n: n * math.log(n) if n > 0 else 0),
         ("O(n^2)", lambda n: n * n),
-        ("O(2^n)", lambda n: 2**n)
+        ("O(2^n)", lambda n: 2**n),
+        ("O(n!)", lambda n: math.factorial(min(n, 20)))
     ]
     
     best_fit = None
@@ -245,8 +252,9 @@ def fit_curves(N_values: List[int], op_counts: List[int]) -> Dict[str, Any]:
 
 def profile_function(func_or_code: Union[Callable, str], generator_name: str | dict = 'random', language: str = 'python', func_name: str = 'example') -> Dict[str, Any]:
     N_values = [10, 50, 100, 200, 400]
-    if 'fib' in generator_name or 'small' in generator_name:
-        N_values = [5, 10, 15, 20, 25]
+    gen_str = str(generator_name).lower()
+    if 'fib' in gen_str or 'small' in gen_str or 'queens' in gen_str or 'sudoku' in gen_str:
+        N_values = [4, 5, 6, 7, 8]
         
     op_counts = []
     

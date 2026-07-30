@@ -64,8 +64,9 @@ def analyze():
         dynamic_result = profile_function(code, generator_to_use, language, func_name)
         
         # Reconciliation
-        # If generator is a dict, for reconciliation we might just want 'auto' or the main structure.
         gen_for_recon = generator_name
+        if isinstance(gen_for_recon, dict):
+            gen_for_recon = str(gen_for_recon)
         recon = reconcile(predicted_static, {gen_for_recon: dynamic_result}, tags)
         
         response_data = {
