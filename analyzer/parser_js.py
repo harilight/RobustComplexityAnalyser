@@ -3,8 +3,7 @@ import tree_sitter_javascript as tsjavascript
 from .ir import FunctionNode, LoopNode, BuiltinCallNode, DataStructureOpNode, IRNode
 import re
 
-_HALVING_RE = re.compile(r'//=\s*2|/=\s*2|>>=\s*1|>>\s*1|\/\s*2|\*\s*0\.5')
-_DOUBLING_RE = re.compile(r'\*=\s*2|<<=\s*1|<<\s*1|\*\s*2')
+_LOG_BOUND_RE = re.compile(r'//=\s*2|/=\s*2|>>=\s*1|>>\s*1|\/\s*2|\*\s*0\.5|\*=\s*2|<<=\s*1|<<\s*1|\*\s*2')
 
 JS_LANGUAGE = Language(tsjavascript.language())
 parser = Parser(JS_LANGUAGE)
@@ -61,7 +60,7 @@ def _detect_loop_bound_type(loop_ts_node) -> str:
                 
         if update_node:
             update_text = update_node.text.decode('utf8')
-            if _HALVING_RE.search(update_text) or _DOUBLING_RE.search(update_text):
+            if _LOG_BOUND_RE.search(update_text):
                 return 'log'
                 
     elif loop_ts_node.type == 'while_statement':
@@ -84,7 +83,7 @@ def _detect_loop_bound_type(loop_ts_node) -> str:
             collect(block)
             
             for text in assignments:
-                if _HALVING_RE.search(text) or _DOUBLING_RE.search(text):
+                if _LOG_BOUND_RE.search(text):
                     return 'log'
                     
     return 'linear'

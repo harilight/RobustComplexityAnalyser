@@ -1,5 +1,6 @@
 import math
-from py_mini_racer import MiniRacer, JSTimeoutException
+from py_mini_racer import MiniRacer
+from py_mini_racer.py_mini_racer import JSTimeoutException
 
 JS_SETUP = """
 const generators = {
@@ -64,10 +65,6 @@ def execute_js_benchmark(code: str, generator_name: str | dict, n: int, trials: 
     and returns the average execution time in milliseconds.
     """
     ctx = MiniRacer()
-    
-    # 512MB Soft, 1024MB Hard limit
-    ctx.set_soft_memory_limit(512 * 1024 * 1024)
-    ctx.set_hard_memory_limit(1024 * 1024 * 1024)
     
     ctx.eval(JS_SETUP)
     ctx.eval(code)

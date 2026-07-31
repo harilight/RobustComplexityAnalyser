@@ -11,6 +11,8 @@ def get_op_complexity(node: IRNode) -> tuple:
         if node.branch_factor > 1:
             if getattr(node, 'arg_reduction', None) == 'halving':
                 return 1.5, 'divide-and-conquer'
+            if getattr(node, 'arg_reduction', None) == 'partition':
+                return 1.5, 'partition-recursion'
             return 1000 + node.branch_factor, f'exponential-{node.branch_factor}'
         elif node.branch_factor == 1:
             if getattr(node, 'arg_reduction', None) == 'halving':

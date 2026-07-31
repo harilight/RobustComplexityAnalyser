@@ -124,5 +124,12 @@
     "code": "function example(arr) {\n    while (arr.length > 0) {\n        arr.shift();\n    }\n}",
     "expected_time": "O(n^2)",
     "tags": ["bug-regression", "js-mutation"]
+  },
+  {
+    "id": "bug6_recursive_bs_fallthrough_py",
+    "language": "python",
+    "code": "def example(arr):\n    target = 42\n    def bs(lo, hi):\n        if lo > hi: return -1\n        mid = (lo + hi) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            return bs(mid + 1, hi)\n        return bs(lo, mid - 1)\n    return bs(0, len(arr) - 1)",
+    "expected_time": "O(log n)",
+    "tags": ["bug-regression", "binary-search", "cfg"]
   }
 ]

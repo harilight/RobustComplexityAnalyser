@@ -25,6 +25,10 @@ def analyze_complexity(func_node: FunctionNode) -> dict:
         c = "O(n log n)"
     else:
         c = f"O(n^{max_power})"
+        
+    if 'partition-recursion' in tags:
+        return {"complexity": {"best": "O(n log n)", "average": "O(n log n)", "worst": "O(n^2)"}, "tags": list(tags)}
+        
     return {"complexity": c, "tags": list(tags)}
 
 def _analyze_block(nodes: list[IRNode], tags: set) -> int:

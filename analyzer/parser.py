@@ -6,7 +6,8 @@ from .ir import FunctionNode, LoopNode, BuiltinCallNode, DataStructureOpNode, IR
 PY_LANGUAGE = Language(tspython.language())
 parser = Parser(PY_LANGUAGE)
 
-_HALVING_RE = re.compile(r'(//\s*2\b|/\s*2\b|>>\s*1\b|>>=\s*1\b|\*=\s*2\b|//=\s*2\b|\[\s*:\s*\w*mid\w*\s*\]|\[\s*\w*mid\w*\s*:\s*\])', re.IGNORECASE)
+_LOG_BOUND_RE = re.compile(r'(//\s*2\b|/\s*2\b|>>\s*1\b|>>=\s*1\b|\*=\s*2\b|//=\s*2\b|<<\s*1\b|<<=\s*1\b|\*\s*0\.5|\[\s*:\s*\w*mid\w*\s*\]|\[\s*\w*mid\w*\s*:\s*\])', re.IGNORECASE)
+_SQRT_RE = re.compile(r'\*\s*([a-zA-Z_]\w*)\s*<=\s*([a-zA-Z_]\w*)', re.IGNORECASE)
 _INCREMENT_RE = re.compile(r'(\+=\s*1\b|-=\s*1\b)', re.IGNORECASE)
 
 def _get_identifiers(node) -> set:
@@ -76,10 +77,10 @@ def _detect_loop_bound_type(loop_ts_node, enclosing_block_ts_node=None, is_inner
     collect(block)
 
     for lhs, text in assignments:
-        if lhs in cond_vars and _HALVING_RE.search(text):
+        if lhs in cond_vars and _LOG_BOUND_RE.search(text):
             return 'log', None
 
-    midpoint_vars = {lhs for lhs, text in assignments if _HALVING_RE.search(text)}
+    midpoint_vars = {lhs for lhs, text in assignments if _LOG_BOUND_RE.search(text)}
     if midpoint_vars:
         for lhs, text in assignments:
             if lhs not in cond_vars:
@@ -174,32 +175,64 @@ def _find_midpoint_vars(node) -> set:
             return
         if n.type == 'assignment':
             lhs = n.children[0] if n.children else None
-            if lhs is not None and lhs.type == 'identifier' and _HALVING_RE.search(n.text.decode('utf8')):
+            if lhs is not None and lhs.type == 'identifier' and _LOG_BOUND_RE.search(n.text.decode('utf8')):
                 midpoint_vars.add(lhs.text.decode('utf8'))
         for c in getattr(n, 'children', []):
             walk(c)
     walk(node)
     return midpoint_vars
 
-def _calls_use_halving_arg(node, func_name: str, midpoint_vars: set = None) -> bool:
+def _find_partition_vars(node) -> set:
+    partition_vars = set()
+    def walk(n):
+        if not hasattr(n, 'type'):
+            return
+        if n.type == 'assignment':
+            lhs = n.children[0] if n.children else None
+            if lhs is not None and lhs.type == 'identifier':
+                rhs = n.children[2] if len(n.children) > 2 else None
+                if rhs and rhs.type == 'list_comprehension':
+                    if _get_child_by_type(rhs, 'if_clause'):
+                        partition_vars.add(lhs.text.decode('utf8'))
+        for c in getattr(n, 'children', []):
+            walk(c)
+    walk(node)
+    return partition_vars
+
+def _analyze_reduction_arg(node, func_name: str, midpoint_vars: set = None, partition_vars: set = None) -> str:
     if midpoint_vars is None:
         midpoint_vars = _find_midpoint_vars(node)
-    if node is None or not hasattr(node, 'type'):
-        return False
-    if node.type == 'call':
-        func = node.children[0]
-        if func.type == 'identifier' and func.text.decode('utf8') == func_name:
-            args_node = _get_child_by_type(node, 'argument_list')
-            if args_node:
-                args_text = args_node.text.decode('utf8')
-                if _HALVING_RE.search(args_text):
-                    return True
-                if any(re.search(r'\b' + re.escape(mv) + r'\b', args_text) for mv in midpoint_vars):
-                    return True
-    for c in getattr(node, 'children', []):
-        if _calls_use_halving_arg(c, func_name, midpoint_vars):
-            return True
-    return False
+    if partition_vars is None:
+        partition_vars = _find_partition_vars(node)
+        
+    def walk(n):
+        if n is None or not hasattr(n, 'type'):
+            return 'unknown'
+        if n.type == 'call':
+            func = n.children[0]
+            if func.type == 'identifier' and func.text.decode('utf8') == func_name:
+                args_node = _get_child_by_type(n, 'argument_list')
+                if args_node:
+                    args_text = args_node.text.decode('utf8')
+                    if _LOG_BOUND_RE.search(args_text):
+                        return 'halving'
+                    if any(re.search(r'\b' + re.escape(mv) + r'\b', args_text) for mv in midpoint_vars):
+                        return 'halving'
+                    if any(re.search(r'\b' + re.escape(pv) + r'\b', args_text) for pv in partition_vars):
+                        return 'partition'
+                        
+                    for arg_c in args_node.children:
+                        if arg_c.type == 'list_comprehension':
+                            if _get_child_by_type(arg_c, 'if_clause'):
+                                return 'partition'
+                                
+        for c in getattr(n, 'children', []):
+            res = walk(c)
+            if res != 'unknown':
+                return res
+        return 'unknown'
+        
+    return walk(node)
 
 def check_memo(node, dict_vars):
     memo_vars = set()
@@ -246,136 +279,122 @@ def check_memo(node, dict_vars):
     
     return any(mv not in removed_vars for mv in memo_vars)
 
-def get_recursive_calls(node, func_name: str, in_variable_loop: bool = False) -> tuple[int, bool, bool, bool]:
-    # Returns: (bf, isf, rft, ft)
-    # bf: max branching factor
-    # isf: is in variable loop
-    # rft: does a path containing recursion fall through to the end of this node?
-    # ft: does ANY path fall through to the end of this node?
-    if node is None: return 0, False, False, True
+def _combine_sequential(paths_seq: list[list[dict]]) -> list[dict]:
+    current_paths = [{'bf': 0, 'isf': False, 'rft': False, 'ft': True}]
+    completed_paths = []
     
+    for statement_paths in paths_seq:
+        next_paths = []
+        for cp in current_paths:
+            if not cp['ft']:
+                completed_paths.append(cp)
+                continue
+            
+            for sp in statement_paths:
+                next_paths.append({
+                    'bf': cp['bf'] + sp['bf'],
+                    'isf': cp['isf'] or sp['isf'],
+                    'rft': (cp['rft'] and sp['ft']) or sp['rft'],
+                    'ft': cp['ft'] and sp['ft']
+                })
+        current_paths = next_paths
+        
+    return completed_paths + current_paths
+
+def _get_recursive_paths(node, func_name: str, in_variable_loop: bool = False) -> list[dict]:
+    if node is None:
+        return [{'bf': 0, 'isf': False, 'rft': False, 'ft': True}]
+        
     if node.type == 'call':
         func = node.children[0]
         call_name = None
-        if func.type == 'identifier':
-            call_name = func.text.decode('utf8')
-        elif func.type == 'attribute':
-            method = func.children[-1]
-            if method.type == 'identifier':
-                call_name = method.text.decode('utf8')
+        if func.type == 'identifier': call_name = func.text.decode('utf8')
+        elif func.type == 'attribute': call_name = func.children[-1].text.decode('utf8')
         
         if call_name == func_name:
-            bf = 1
-            isf = in_variable_loop
-            rft = True
-            ft = True
-            for c in node.children:
-                sub_bf, sub_isf, sub_rft, sub_ft = get_recursive_calls(c, func_name, in_variable_loop)
-                rft = (rft and sub_ft) or sub_rft
-                bf += sub_bf
-                isf = isf or sub_isf
-                ft = ft and sub_ft
-            return bf, isf, rft, ft
+            paths_seq = [_get_recursive_paths(c, func_name, in_variable_loop) for c in node.children]
+            res = _combine_sequential(paths_seq)
+            for p in res:
+                p['bf'] += 1
+                p['isf'] = p['isf'] or in_variable_loop
+                p['rft'] = True
+            return res
             
     if node.type in ('return_statement', 'break_statement'):
-        bf = 0
-        isf = False
-        rft = False
-        ft = False
-        for c in node.children:
-            sub_bf, sub_isf, sub_rft, sub_ft = get_recursive_calls(c, func_name, in_variable_loop)
-            rft = (rft and sub_ft) or sub_rft
-            bf += sub_bf
-            isf = isf or sub_isf
-            ft = ft and sub_ft
-        # A return/break never falls through generally, and recursion inside it doesn't either.
-        return bf, isf, False, False
+        paths_seq = [_get_recursive_paths(c, func_name, in_variable_loop) for c in node.children]
+        res = _combine_sequential(paths_seq)
+        for p in res:
+            p['ft'] = False
+            p['rft'] = False
+        return res
         
     if node.type in ('for_statement', 'while_statement'):
         btype, bval = _detect_loop_bound_type(node)
         is_var = (btype != 'const')
         
-        bf = 0
-        isf = False
-        rft = False
-        ft = True
+        paths_seq = [_get_recursive_paths(c, func_name, is_var or in_variable_loop) for c in node.children]
+        res = _combine_sequential(paths_seq)
         
-        for c in node.children:
-            sub_bf, sub_isf, sub_rft, sub_ft = get_recursive_calls(c, func_name, is_var or in_variable_loop)
-            if ft:
-                rft = (rft and sub_ft) or sub_rft
-                bf += sub_bf
-                isf = isf or sub_isf
-                ft = ft and sub_ft
+        for p in res:
+            if p['bf'] > 0:
+                multiplier = int(bval) if btype == 'const' and bval else 2
+                if is_var:
+                    p['isf'] = True
+                    multiplier = 1
+                if not p['rft']:
+                    multiplier = 1
+                p['bf'] *= multiplier
                 
-        if bf > 0:
-            multiplier = int(bval) if btype == 'const' and bval else 2
-            if is_var:
-                isf = True
-                multiplier = 1
-                
-            if not rft:
-                multiplier = 1
-                
-            return bf * multiplier, isf, rft, True
-        return 0, False, False, True
+        # A loop can always skip or terminate without hitting a nested return
+        res.append({'bf': 0, 'isf': False, 'rft': False, 'ft': True})
+        return res
         
     if node.type == 'if_statement':
         cons = _get_child_by_type(node, 'block')
         
-        alt_bf, alt_isf, alt_rft, alt_ft = 0, False, False, True
-        has_else = False
+        cond_children = [c for c in node.children if c.type not in ('block', 'elif_clause', 'else_clause')]
+        cond_paths_seq = [_get_recursive_paths(c, func_name, in_variable_loop) for c in cond_children]
+        cond_paths = _combine_sequential(cond_paths_seq)
         
+        branches = []
+        if cons:
+            branches.append(_get_recursive_paths(cons, func_name, in_variable_loop))
+        else:
+            branches.append([{'bf': 0, 'isf': False, 'rft': False, 'ft': True}])
+            
+        has_else = False
         for c in node.children:
             if c.type in ('elif_clause', 'else_clause'):
-                has_else = True
+                if c.type == 'else_clause': has_else = True
                 b = _get_child_by_type(c, 'block')
                 if b:
-                    c_bf, c_isf, c_rft, c_ft = get_recursive_calls(b, func_name, in_variable_loop)
-                    if c_bf > alt_bf:
-                        alt_bf = c_bf
-                        alt_isf = c_isf
-                    alt_rft = alt_rft or c_rft
-                    alt_ft = alt_ft or c_ft
+                    branches.append(_get_recursive_paths(b, func_name, in_variable_loop))
+                else:
+                    branches.append([{'bf': 0, 'isf': False, 'rft': False, 'ft': True}])
                     
         if not has_else:
-            alt_ft = True
+            branches.append([{'bf': 0, 'isf': False, 'rft': False, 'ft': True}])
             
-        c_bf, c_isf, c_rft, c_ft = get_recursive_calls(cons, func_name, in_variable_loop) if cons else (0, False, False, True)
+        merged_branches = []
+        for branch_paths in branches:
+            merged_branches.extend(_combine_sequential([cond_paths, branch_paths]))
+            
+        return merged_branches
         
-        cond_bf, cond_isf, cond_rft, cond_ft = 0, False, False, True
-        for c in node.children:
-            if c.type not in ('block', 'elif_clause', 'else_clause'):
-                sub_bf, sub_isf, sub_rft, sub_ft = get_recursive_calls(c, func_name, in_variable_loop)
-                cond_rft = (cond_rft and sub_ft) or sub_rft
-                cond_bf += sub_bf
-                cond_isf = cond_isf or sub_isf
-                cond_ft = cond_ft and sub_ft
-                
-        max_bf = max(c_bf, alt_bf)
-        branch_isf = c_isf if max_bf == c_bf else alt_isf
-        branch_rft = c_rft or alt_rft
-        branch_ft = c_ft or alt_ft
-        
-        total_bf = cond_bf + max_bf
-        total_isf = cond_isf or branch_isf
-        total_rft = (cond_rft and branch_ft) or branch_rft
-        total_ft = cond_ft and branch_ft
-        
-        return total_bf, total_isf, total_rft, total_ft
-        
-    bf = 0
-    isf = False
-    rft = False
-    ft = True
-    for c in node.children:
-        sub_bf, sub_isf, sub_rft, sub_ft = get_recursive_calls(c, func_name, in_variable_loop)
-        if ft:
-            rft = (rft and sub_ft) or sub_rft
-            bf += sub_bf
-            isf = isf or sub_isf
-            ft = ft and sub_ft
-    return bf, isf, rft, ft
+    paths_seq = [_get_recursive_paths(c, func_name, in_variable_loop) for c in node.children]
+    return _combine_sequential(paths_seq)
+
+def get_recursive_calls(node, func_name: str, in_variable_loop: bool = False) -> tuple[int, bool, bool, bool]:
+    paths = _get_recursive_paths(node, func_name, in_variable_loop)
+    if not paths:
+        return 0, False, False, True
+    
+    max_bf = max(p['bf'] for p in paths)
+    isf = any(p['isf'] for p in paths if p['bf'] == max_bf)
+    rft = any(p['rft'] for p in paths)
+    ft = any(p['ft'] for p in paths)
+    
+    return max_bf, isf, rft, ft
 
 def parse_python(code: str) -> FunctionNode:
     tree = parser.parse(bytes(code, "utf8"))
@@ -508,13 +527,12 @@ def parse_python(code: str) -> FunctionNode:
     
     if body:
         func_node.body = _traverse_block(body, body, params, accessed_attributes, dict_vars, False, string_vars, func_name, class_methods, [func_name])
-        
         branch_factor, is_factorial, _, _ = get_recursive_calls(body, func_name)
 
         dp_dimension = len(params) if params else 1
         if branch_factor > 0:
-            reduction = 'halving' if _calls_use_halving_arg(body, func_name) else 'unknown'
-            func_node.body.append(RecursiveCallNode(branch_factor=branch_factor, is_memoized=is_memoized, arg_reduction=reduction, is_factorial=is_factorial, dp_dimension=dp_dimension))
+            arg_red = _analyze_reduction_arg(body, func_name)
+            func_node.body.append(RecursiveCallNode(branch_factor=branch_factor, is_memoized=is_memoized, arg_reduction=arg_red, is_factorial=is_factorial, dp_dimension=dp_dimension))
             
     return func_node
 
@@ -566,8 +584,8 @@ def _traverse_block(block_node, enclosing_block_ts_node=None, params=None, acces
                 inner_dp_dimension = len(inner_params) if inner_params else 1
                 
                 if branch > 0:
-                    inner_reduction = 'halving' if _calls_use_halving_arg(inner_block, inner_func_name) else 'unknown'
-                    inner_nodes.append(RecursiveCallNode(branch_factor=branch, is_memoized=inner_memoized, arg_reduction=inner_reduction, is_factorial=is_fac, dp_dimension=inner_dp_dimension))
+                    inner_arg_red = _analyze_reduction_arg(inner_block, inner_func_name)
+                    inner_nodes.append(RecursiveCallNode(branch_factor=branch, is_memoized=inner_memoized, arg_reduction=inner_arg_red, is_factorial=is_fac, dp_dimension=inner_dp_dimension))
                 nodes.extend(inner_nodes)
         elif child.type in ('list_comprehension', 'set_comprehension', 'dictionary_comprehension', 'generator_expression'):
             loop = LoopNode(bound_type='linear', bound_value=None)
@@ -670,7 +688,7 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
                             branch, is_fac, _, _ = get_recursive_calls(target_block, attr_name)
                             if branch > 0:
                                 t_dp_dim = len(t_params) if t_params else 1
-                                arg_red = 'halving' if _calls_use_halving_arg(target_block, attr_name) else 'unknown'
+                                arg_red = _analyze_reduction_arg(target_block, attr_name)
                                 inlined.append(RecursiveCallNode(branch_factor=branch, is_memoized=False, arg_reduction=arg_red, is_factorial=is_fac, dp_dimension=t_dp_dim))
                             nodes.extend(inlined)
                             return nodes
