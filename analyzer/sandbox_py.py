@@ -52,11 +52,14 @@ def run_in_sandbox(func_code: str, generator_name: str | dict, n: int, trials: i
             if not found:
                 raise KeyError(func_name)
         
-        from .profiler import count_operations, generators, gen_random, gen_random_two_args, gen_multi_args
+        from .profiler import count_operations, generators, gen_random, gen_random_two_args, gen_multi_args, get_generator_for_type
         if isinstance(generator_name, dict):
             args_gen = lambda n: gen_multi_args(generator_name, n)
         else:
-            args_gen = generators.get(generator_name, gen_random)
+            if generator_name in generators:
+                args_gen = generators[generator_name]
+            else:
+                args_gen = lambda n: (get_generator_for_type(generator_name, n),)
         
         total_count = 0
         for _ in range(trials):

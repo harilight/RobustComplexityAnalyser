@@ -180,7 +180,7 @@ PROBLEMS = {
         if digits:
             backtrack(0, "")
         return res""",
-        "scalar_string"
+        {"digits": {"type": "scalar_string", "alphabet": "23456789"}}
     ),
 
     # 3. 2D Dynamic Programming

@@ -1,0 +1,177 @@
+{
+  "Course Schedule": {
+    "static": "O(n!)",
+    "dynamic": "O(n)",
+    "verdict": "O(n!)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n!)) > Dynamic (O(n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Word Search": {
+    "static": "O(4^n)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(4^n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(4^n)) > Dynamic (O(2^n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Word Break II": {
+    "static": "O(n^2)",
+    "dynamic": "O(n)",
+    "verdict": "O(n^2)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n^2)) > Dynamic (O(n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Permutations": {
+    "static": "O(n!)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(n!)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n!)) > Dynamic (O(2^n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Combinations": {
+    "static": "O(n!)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(n!)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n!)) > Dynamic (O(2^n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Subsets": {
+    "static": "O(2^n)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(2^n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "N-Queens": {
+    "static": "O(n!)",
+    "dynamic": "O(n!)",
+    "verdict": "O(n!)",
+    "confidence": "LOW",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Letter Combinations": {
+    "static": "O(n!)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(n!)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n!)) > Dynamic (O(2^n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Wildcard Matching": {
+    "static": "O(n^2)",
+    "dynamic": "O(n!)",
+    "verdict": "O(n!)",
+    "confidence": "MEDIUM",
+    "reasoning": "Mismatch: Dynamic (O(n!)) > Static (O(n^2)). Decisive fit indicates hidden overhead missed by static analysis."
+  },
+  "Partition Equal Subset Sum": {
+    "static": "O(n^2)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(2^n)",
+    "confidence": "MEDIUM",
+    "reasoning": "Mismatch: Dynamic (O(2^n)) > Static (O(n^2)). Decisive fit indicates hidden overhead missed by static analysis."
+  },
+  "Edit Distance": {
+    "static": "O(n^2)",
+    "dynamic": "O(n^2)",
+    "verdict": "O(n^2)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Longest Repeating Character Replacement": {
+    "static": "O(n)",
+    "dynamic": "O(n^2)",
+    "verdict": "O(n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Dynamic (O(n^2)) > Static (O(n)), but dynamic fit is noisy. Trusting static."
+  },
+  "Permutation in String": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Find All Anagrams": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Subarray Sum Equals K": {
+    "static": "O(n)",
+    "dynamic": "O(log n)",
+    "verdict": "O(n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n)) > Dynamic (O(log n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Repeated DNA Sequences": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Longest Valid Parentheses": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Valid Anagram": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Group Anagrams": {
+    "static": "O(n^2)",
+    "dynamic": "O(n)",
+    "verdict": "O(n^2)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n^2)) > Dynamic (O(n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Longest Common Prefix": {
+    "static": "O(n^2)",
+    "dynamic": "O(1)",
+    "verdict": "O(n^2)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n^2)) > Dynamic (O(1)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Implement strStr()": {
+    "static": "O(n)",
+    "dynamic": "O(1)",
+    "verdict": "O(n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n)) > Dynamic (O(1)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+  },
+  "Valid Sudoku": {
+    "static": "O(n)",
+    "dynamic": "O(2^n)",
+    "verdict": "O(2^n)",
+    "confidence": "MEDIUM",
+    "reasoning": "Mismatch: Dynamic (O(2^n)) > Static (O(n)). Decisive fit indicates hidden overhead missed by static analysis."
+  },
+  "Spiral Matrix": {
+    "static": "O(n^2)",
+    "dynamic": "O(n^2)",
+    "verdict": "O(n^2)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  },
+  "Rotate Array": {
+    "static": "O(n)",
+    "dynamic": "O(n^2)",
+    "verdict": "O(n)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Dynamic (O(n^2)) > Static (O(n)), but dynamic fit is noisy. Trusting static."
+  },
+  "Container With Most Water": {
+    "static": "O(n)",
+    "dynamic": "O(n)",
+    "verdict": "O(n)",
+    "confidence": "HIGH",
+    "reasoning": "Static and dynamic analysis perfectly match."
+  }
+}

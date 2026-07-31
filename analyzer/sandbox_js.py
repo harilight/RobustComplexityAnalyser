@@ -73,33 +73,38 @@ def execute_js_benchmark(code: str, generator_name: str | dict, n: int, trials: 
     ctx.eval(code)
     
     # Generate the string to build test_args
+    def map_js_gen(g):
+        if isinstance(g, dict):
+            g_type = g.get('type')
+            if g_type == 'scalar_string':
+                alphabet = g.get('alphabet')
+                if alphabet:
+                    alph_str = "".join(alphabet).replace("'", "\\'").replace("\n", "").replace("\\", "\\\\")
+                    return f"(function(sz) {{ let a='{alph_str}'; let res=''; for(let i=0; i<sz; i++) res+=a.charAt(Math.floor(Math.random()*a.length)); return res; }})(size)"
+            g = g_type
+            
+        if g in ['matrix', 'linked_list', 'binary_tree', 'graph_adj_list', 'graph_edges']:
+            return f"generators['{g}'](size)[0]"
+        elif g == 'scalar_string':
+            # Mirror String Profile for Palindrome tests (worst-case O(N))
+            return "(function(sz) { let half = Math.floor(sz/2); let s = Array.from({length: half}, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join(''); return s + s.split('').reverse().join('').substring(0, sz - half); })(size)"
+        elif g == 'size_int':
+            return "size"
+        elif g == '1d_array_sorted':
+            return "Array.from({length: size}, () => Math.floor(Math.random() * 1000)).sort((a,b) => a-b)"
+        elif g == '1d_string_array':
+            return "Array.from({length: size}, (_, i) => String.fromCharCode(97 + (i % 26)))"
+        else:
+            return f"generators['random'](size)[0]"
+
     if isinstance(generator_name, dict):
-        def map_js_gen(g):
-            if isinstance(g, dict):
-                g_type = g.get('type')
-                if g_type == 'scalar_string':
-                    alphabet = g.get('alphabet')
-                    if alphabet:
-                        alph_str = "".join(alphabet).replace("'", "\\'").replace("\n", "").replace("\\", "\\\\")
-                        return f"(function(sz) {{ let a='{alph_str}'; let res=''; for(let i=0; i<sz; i++) res+=a.charAt(Math.floor(Math.random()*a.length)); return res; }})(size)"
-                g = g_type
-                
-            if g in ['matrix', 'linked_list', 'binary_tree', 'graph_adj_list', 'graph_edges']:
-                return f"generators['{g}'](size)[0]"
-            elif g == 'scalar_string':
-                # Mirror String Profile for Palindrome tests (worst-case O(N))
-                return "(function(sz) { let half = Math.floor(sz/2); let s = Array.from({length: half}, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join(''); return s + s.split('').reverse().join('').substring(0, sz - half); })(size)"
-            elif g == 'size_int':
-                return "size"
-            elif g == '1d_array_sorted':
-                return "Array.from({length: size}, () => Math.floor(Math.random() * 1000)).sort((a,b) => a-b)"
-            else:
-                return f"generators['random'](size)[0]"
-        
         args_builder = "[" + ", ".join(map_js_gen(g) for g in generator_name.values()) + "]"
         args_builder = args_builder.replace("generators['random'](size)[0]", "Array.from({length: size}, () => Math.floor(Math.random() * 1000))")
     else:
-        args_builder = f"generators['{generator_name}'](size)"
+        if generator_name in ['random', 'target_at_start', 'target_absent', 'fib_arg', 'binary_tree', 'linked_list', 'graph_adj_list', 'graph_edges', 'matrix']:
+            args_builder = f"generators['{generator_name}'](size)"
+        else:
+            args_builder = "[" + map_js_gen(generator_name) + "]"
         
     # Warmup to trigger V8 JIT Compilation
     ctx.eval(f"var size = 10; var test_args = {args_builder};")
