@@ -42,9 +42,24 @@ def _get_child_by_type(node, node_type):
             return child
     return None
 
-def _detect_loop_bound_type(loop_ts_node) -> str:
+_INCREMENT_RE = re.compile(r'\+=\s*1|-\=\s*1|\+\+|--')
+
+def _get_identifiers(node) -> set:
+    identifiers = set()
+    def find_ids(n):
+        if not hasattr(n, 'type'): return
+        if n.type == 'identifier':
+            identifiers.add(n.text.decode('utf8'))
+        for c in getattr(n, 'children', []):
+            find_ids(c)
+    find_ids(node)
+    return identifiers
+
+def _detect_loop_bound_type(loop_ts_node, enclosing_block_ts_node=None, is_inner_loop=False) -> str:
+    cond_vars = set()
+    condition_node = None
+    
     if loop_ts_node.type == 'for_statement':
-        condition_node = None
         update_node = None
         for c in loop_ts_node.children:
             if c.type in ('binary_expression', 'expression_statement'):
@@ -54,6 +69,7 @@ def _detect_loop_bound_type(loop_ts_node) -> str:
                 update_node = c
                 
         if condition_node:
+            cond_vars = _get_identifiers(condition_node)
             cond_text = condition_node.text.decode('utf8')
             if re.search(r'\b([a-zA-Z_]\w*)\s*\*\s*\1\s*<=', cond_text) or re.search(r'\b([a-zA-Z_]\w*)\s*\*\*\s*2\s*<=', cond_text):
                 return 'sqrt'
@@ -66,6 +82,8 @@ def _detect_loop_bound_type(loop_ts_node) -> str:
     elif loop_ts_node.type == 'while_statement':
         paren_expr = _get_child_by_type(loop_ts_node, 'parenthesized_expression')
         if paren_expr:
+            condition_node = paren_expr
+            cond_vars = _get_identifiers(paren_expr)
             cond_text = paren_expr.text.decode('utf8')
             if re.search(r'\b([a-zA-Z_]\w*)\s*\*\s*\1\s*<=', cond_text) or re.search(r'\b([a-zA-Z_]\w*)\s*\*\*\s*2\s*<=', cond_text):
                 return 'sqrt'
@@ -86,9 +104,133 @@ def _detect_loop_bound_type(loop_ts_node) -> str:
                 if _LOG_BOUND_RE.search(text):
                     return 'log'
                     
+    block = _get_child_by_type(loop_ts_node, 'statement_block')
+    if enclosing_block_ts_node and is_inner_loop and block:
+        # Sliding Window
+        increments = set()
+        def find_increments(n):
+            if not hasattr(n, 'type'): return
+            if n.type in ('for_statement', 'while_statement', 'for_in_statement', 'for_of_statement'): return
+            if n.type in ('update_expression', 'augmented_assignment_expression'):
+                text = n.text.decode('utf8')
+                if _INCREMENT_RE.search(text):
+                    ids = _get_identifiers(n)
+                    increments.update(ids)
+            for c in getattr(n, 'children', []):
+                find_increments(c)
+        find_increments(block)
+        
+        indices = set()
+        def find_indices(n):
+            if not hasattr(n, 'type'): return
+            if n.type == 'subscript_expression':
+                indices.update(_get_identifiers(n))
+            for c in getattr(n, 'children', []):
+                find_indices(c)
+        find_indices(block)
+        
+        candidates = {inc for inc in increments if inc in cond_vars or inc in indices}
+        
+        if candidates:
+            resets = set()
+            def find_resets(n):
+                if not hasattr(n, 'type') or n == loop_ts_node: return
+                if n.type == 'assignment_expression':
+                    lhs = n.children[0] if n.children else None
+                    if lhs is not None:
+                        resets.update(_get_identifiers(lhs))
+                for c in getattr(n, 'children', []):
+                    find_resets(c)
+            find_resets(enclosing_block_ts_node)
+            if any(c not in resets for c in candidates):
+                return 'amortized'
+                
+        # Monotonic Stack
+        inner_pops = set()
+        def find_inner_pops(n):
+            if not hasattr(n, 'type'): return
+            if n.type == 'call_expression':
+                func = _get_child_by_type(n, 'member_expression')
+                if func and len(func.children) >= 3:
+                    obj = func.children[0]
+                    attr = func.children[2]
+                    if attr.type == 'property_identifier' and attr.text.decode('utf8') in ('pop', 'shift', 'splice'):
+                        if obj.type == 'identifier':
+                            inner_pops.add(obj.text.decode('utf8'))
+            for c in getattr(n, 'children', []):
+                find_inner_pops(c)
+        find_inner_pops(block)
+        
+        if inner_pops:
+            outer_appends = set()
+            def find_outer_appends(n):
+                if not hasattr(n, 'type') or n == loop_ts_node: return
+                if n.type == 'call_expression':
+                    func = _get_child_by_type(n, 'member_expression')
+                    if func and len(func.children) >= 3:
+                        obj = func.children[0]
+                        attr = func.children[2]
+                        if attr.type == 'property_identifier' and attr.text.decode('utf8') in ('push', 'unshift', 'splice'):
+                            if obj.type == 'identifier':
+                                outer_appends.add(obj.text.decode('utf8'))
+                for c in getattr(n, 'children', []):
+                    find_outer_appends(c)
+            find_outer_appends(enclosing_block_ts_node)
+            
+            if any(p in outer_appends and p in cond_vars for p in inner_pops):
+                return 'amortized'
+
+    if loop_ts_node.type == 'while_statement' and block:
+        has_queue_pop = False
+        queue_vars = set()
+        def find_queue_pop(n):
+            nonlocal has_queue_pop
+            if not hasattr(n, 'type'): return
+            if n.type == 'call_expression':
+                func = _get_child_by_type(n, 'member_expression')
+                if func and len(func.children) >= 3:
+                    obj = func.children[0]
+                    attr = func.children[2]
+                    if attr.type == 'property_identifier' and attr.text.decode('utf8') in ('shift', 'pop'):
+                        if obj.type == 'identifier':
+                            has_queue_pop = True
+                            queue_vars.add(obj.text.decode('utf8'))
+            for c in getattr(n, 'children', []):
+                find_queue_pop(c)
+        find_queue_pop(block)
+        
+        if has_queue_pop and any(qv in cond_vars for qv in queue_vars):
+            for c in getattr(block, 'children', []):
+                if c.type in ('for_statement', 'while_statement', 'for_of_statement'):
+                    inner_has_append = False
+                    inner_has_add = False
+                    inner_has_remove = False
+                    def check_bfs_inner(n):
+                        nonlocal inner_has_append, inner_has_add, inner_has_remove
+                        if not hasattr(n, 'type'): return
+                        if n.type == 'call_expression':
+                            func = _get_child_by_type(n, 'member_expression')
+                            if func and len(func.children) >= 3:
+                                obj = func.children[0]
+                                attr = func.children[2]
+                                if obj.type == 'identifier' and attr.type == 'property_identifier':
+                                    obj_name = obj.text.decode('utf8')
+                                    attr_name = attr.text.decode('utf8')
+                                    if attr_name == 'push' and obj_name in queue_vars:
+                                        inner_has_append = True
+                                    elif attr_name == 'add':
+                                        inner_has_add = True
+                                    elif attr_name in ('delete', 'remove'):
+                                        inner_has_remove = True
+                        for ch in getattr(n, 'children', []):
+                            check_bfs_inner(ch)
+                    check_bfs_inner(c)
+                    if inner_has_append and inner_has_add and not inner_has_remove:
+                        return 'amortized'
+                        
     return 'linear'
 
-def _traverse_block(block_node) -> list[IRNode]:
+def _traverse_block(block_node, enclosing_block_ts_node=None, is_inner_loop=False) -> list[IRNode]:
     nodes = []
     
     if not hasattr(block_node, 'children'):
@@ -96,11 +238,11 @@ def _traverse_block(block_node) -> list[IRNode]:
         
     for child in block_node.children:
         if child.type in ('for_statement', 'while_statement', 'for_in_statement', 'for_of_statement'):
-            btype = _detect_loop_bound_type(child)
+            btype = _detect_loop_bound_type(child, enclosing_block_ts_node, is_inner_loop)
             loop = LoopNode(bound_type=btype)
             loop_body = _get_child_by_type(child, 'statement_block')
             if loop_body:
-                loop.body = _traverse_block(loop_body)
+                loop.body = _traverse_block(loop_body, block_node, True)
             else:
                 loop.body = _find_operations(child)
             nodes.append(loop)

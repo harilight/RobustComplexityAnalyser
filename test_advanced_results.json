@@ -1,10 +1,10 @@
 {
   "Course Schedule": {
     "static": "O(n!)",
-    "dynamic": "O(n)",
+    "dynamic": "O(n^2)",
     "verdict": "O(n!)",
     "confidence": "LOW",
-    "reasoning": "Mismatch: Static (O(n!)) > Dynamic (O(n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
+    "reasoning": "Mismatch: Static (O(n!)) > Dynamic (O(n^2)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
   },
   "Word Search": {
     "static": "O(4^n)",
@@ -57,10 +57,10 @@
   },
   "Wildcard Matching": {
     "static": "O(n^2)",
-    "dynamic": "O(n!)",
-    "verdict": "O(n!)",
-    "confidence": "MEDIUM",
-    "reasoning": "Mismatch: Dynamic (O(n!)) > Static (O(n^2)). Decisive fit indicates hidden overhead missed by static analysis."
+    "dynamic": "O(log n)",
+    "verdict": "O(n^2)",
+    "confidence": "LOW",
+    "reasoning": "Mismatch: Static (O(n^2)) > Dynamic (O(log n)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
   },
   "Partition Equal Subset Sum": {
     "static": "O(n^2)",
@@ -147,11 +147,11 @@
     "reasoning": "Mismatch: Static (O(n)) > Dynamic (O(1)). Data-Dependent Early Exit or Hardcoded Bounds Detected. Trusting STATIC_ONLY."
   },
   "Valid Sudoku": {
-    "static": "O(n)",
-    "dynamic": "O(2^n)",
-    "verdict": "O(2^n)",
+    "static": "O(n^2)",
+    "dynamic": "O(n!)",
+    "verdict": "O(n!)",
     "confidence": "MEDIUM",
-    "reasoning": "Mismatch: Dynamic (O(2^n)) > Static (O(n)). Decisive fit indicates hidden overhead missed by static analysis."
+    "reasoning": "Mismatch: Dynamic (O(n!)) > Static (O(n^2)). Decisive fit indicates hidden overhead missed by static analysis."
   },
   "Spiral Matrix": {
     "static": "O(n^2)",

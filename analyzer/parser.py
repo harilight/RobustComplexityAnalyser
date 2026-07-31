@@ -117,6 +117,41 @@ def _detect_loop_bound_type(loop_ts_node, enclosing_block_ts_node=None, is_inner
             find_resets(enclosing_block_ts_node)
             if any(c not in resets for c in candidates):
                 return 'amortized', None
+                
+        inner_pops = set()
+        def find_inner_pops(n):
+            if not hasattr(n, 'type'): return
+            if n.type == 'call':
+                func = _get_child_by_type(n, 'attribute')
+                if func and len(func.children) >= 3:
+                    obj = func.children[0]
+                    attr = func.children[2]
+                    if attr.type == 'identifier' and attr.text.decode('utf8') in ('pop', 'popleft', 'popitem', 'remove'):
+                        if obj.type == 'identifier':
+                            inner_pops.add(obj.text.decode('utf8'))
+            for c in getattr(n, 'children', []):
+                find_inner_pops(c)
+        if block:
+            find_inner_pops(block)
+            
+        if inner_pops:
+            outer_appends = set()
+            def find_outer_appends(n):
+                if not hasattr(n, 'type') or n == loop_ts_node: return
+                if n.type == 'call':
+                    func = _get_child_by_type(n, 'attribute')
+                    if func and len(func.children) >= 3:
+                        obj = func.children[0]
+                        attr = func.children[2]
+                        if attr.type == 'identifier' and attr.text.decode('utf8') in ('append', 'push', 'add', 'insert'):
+                            if obj.type == 'identifier':
+                                outer_appends.add(obj.text.decode('utf8'))
+                for c in getattr(n, 'children', []):
+                    find_outer_appends(c)
+            find_outer_appends(enclosing_block_ts_node)
+            
+            if any(p in outer_appends and p in cond_vars for p in inner_pops):
+                return 'amortized', None
 
     if loop_ts_node.type == 'while_statement':
         has_queue_pop = False
