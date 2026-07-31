@@ -698,8 +698,13 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
                 if arg_count < 2:
                     nodes.append(BuiltinCallNode(name=func_name))
             elif func_name in ('sorted', 'sum', 'all', 'any', 'heappush', 'heappop', 'Counter', 'zip', 'map', 'filter', 'list', 'set', 'reversed'):
-                nodes.append(BuiltinCallNode(name=func_name))
-                
+                args_node = _get_child_by_type(node, 'argument_list')
+                arg_count = 0
+                if args_node:
+                    arg_count = sum(1 for c in args_node.children if c.type not in ('(', ')', ',', 'comment'))
+                if arg_count >= 1:
+                    nodes.append(BuiltinCallNode(name=func_name))
+
     if node.type in ('list_comprehension', 'set_comprehension', 'dictionary_comprehension', 'generator_expression'):
         loop = LoopNode(bound_type='linear', bound_value=None)
         loop.body = _traverse_block(node, node, params, accessed_attributes, dict_vars, True, string_vars, current_func_name, class_methods, parse_stack)
