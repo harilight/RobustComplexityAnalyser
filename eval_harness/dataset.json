@@ -89,5 +89,40 @@
     "generators": {
       "fib_arg": "O(n)"
     }
+  },
+  {
+    "id": "bug1_merge_sort_py",
+    "language": "python",
+    "code": "def example(arr):\n    if len(arr) <= 1: return arr\n    mid = len(arr)//2\n    left = example(arr[:mid])\n    right = example(arr[mid:])\n    res = []\n    i = j = 0\n    while i < len(left) and j < len(right):\n        if left[i] < right[j]:\n            res.append(left[i])\n            i += 1\n        else:\n            res.append(right[j])\n            j += 1\n    res.extend(left[i:])\n    res.extend(right[j:])\n    return res",
+    "expected_time": "O(n log n)",
+    "tags": ["bug-regression", "divide-and-conquer"]
+  },
+  {
+    "id": "bug2_recursive_bs_py",
+    "language": "python",
+    "code": "def example(arr):\n    target = 42\n    def bs(lo, hi):\n        if lo > hi: return -1\n        mid = (lo + hi) // 2\n        if arr[mid] == target: return mid\n        elif arr[mid] < target: return bs(mid + 1, hi)\n        else: return bs(lo, mid - 1)\n    return bs(0, len(arr) - 1)",
+    "expected_time": "O(log n)",
+    "tags": ["bug-regression", "binary-search"]
+  },
+  {
+    "id": "bug3_sqrt_loop_py",
+    "language": "python",
+    "code": "def example(arr):\n    n = len(arr)\n    i = 2\n    c = 0\n    while i * i <= n:\n        c += 1\n        i += 1\n    return c",
+    "expected_time": "O(sqrt n)",
+    "tags": ["bug-regression", "sqrt-bound"]
+  },
+  {
+    "id": "bug4_unlisted_builtin_py",
+    "language": "python",
+    "code": "from collections import Counter\ndef example(s, t):\n    return Counter(s) == Counter(t)",
+    "expected_time": "O(n)",
+    "tags": ["bug-regression", "builtin-fallback"]
+  },
+  {
+    "id": "bug5_js_shift_mutation",
+    "language": "javascript",
+    "code": "function example(arr) {\n    while (arr.length > 0) {\n        arr.shift();\n    }\n}",
+    "expected_time": "O(n^2)",
+    "tags": ["bug-regression", "js-mutation"]
   }
 ]

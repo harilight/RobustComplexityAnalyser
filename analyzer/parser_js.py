@@ -1,6 +1,10 @@
 from tree_sitter import Language, Parser
 import tree_sitter_javascript as tsjavascript
 from .ir import FunctionNode, LoopNode, BuiltinCallNode, DataStructureOpNode, IRNode
+import re
+
+_HALVING_RE = re.compile(r'//=\s*2|/=\s*2|>>=\s*1|>>\s*1|\/\s*2|\*\s*0\.5')
+_DOUBLING_RE = re.compile(r'\*=\s*2|<<=\s*1|<<\s*1|\*\s*2')
 
 JS_LANGUAGE = Language(tsjavascript.language())
 parser = Parser(JS_LANGUAGE)
@@ -39,6 +43,52 @@ def _get_child_by_type(node, node_type):
             return child
     return None
 
+def _detect_loop_bound_type(loop_ts_node) -> str:
+    if loop_ts_node.type == 'for_statement':
+        condition_node = None
+        update_node = None
+        for c in loop_ts_node.children:
+            if c.type in ('binary_expression', 'expression_statement'):
+                if c.type == 'binary_expression' and not condition_node:
+                    condition_node = c
+            elif c.type in ('update_expression', 'augmented_assignment_expression'):
+                update_node = c
+                
+        if condition_node:
+            cond_text = condition_node.text.decode('utf8')
+            if re.search(r'\b([a-zA-Z_]\w*)\s*\*\s*\1\s*<=', cond_text) or re.search(r'\b([a-zA-Z_]\w*)\s*\*\*\s*2\s*<=', cond_text):
+                return 'sqrt'
+                
+        if update_node:
+            update_text = update_node.text.decode('utf8')
+            if _HALVING_RE.search(update_text) or _DOUBLING_RE.search(update_text):
+                return 'log'
+                
+    elif loop_ts_node.type == 'while_statement':
+        paren_expr = _get_child_by_type(loop_ts_node, 'parenthesized_expression')
+        if paren_expr:
+            cond_text = paren_expr.text.decode('utf8')
+            if re.search(r'\b([a-zA-Z_]\w*)\s*\*\s*\1\s*<=', cond_text) or re.search(r'\b([a-zA-Z_]\w*)\s*\*\*\s*2\s*<=', cond_text):
+                return 'sqrt'
+                
+        block = _get_child_by_type(loop_ts_node, 'statement_block')
+        if block:
+            assignments = []
+            def collect(n):
+                if not hasattr(n, 'type'): return
+                if n.type in ('for_statement', 'while_statement', 'for_in_statement', 'for_of_statement'): return
+                if n.type in ('assignment_expression', 'augmented_assignment_expression', 'update_expression'):
+                    assignments.append(n.text.decode('utf8'))
+                for c in getattr(n, 'children', []):
+                    collect(c)
+            collect(block)
+            
+            for text in assignments:
+                if _HALVING_RE.search(text) or _DOUBLING_RE.search(text):
+                    return 'log'
+                    
+    return 'linear'
+
 def _traverse_block(block_node) -> list[IRNode]:
     nodes = []
     
@@ -47,7 +97,8 @@ def _traverse_block(block_node) -> list[IRNode]:
         
     for child in block_node.children:
         if child.type in ('for_statement', 'while_statement', 'for_in_statement', 'for_of_statement'):
-            loop = LoopNode(bound_type='linear')
+            btype = _detect_loop_bound_type(child)
+            loop = LoopNode(bound_type=btype)
             loop_body = _get_child_by_type(child, 'statement_block')
             if loop_body:
                 loop.body = _traverse_block(loop_body)
@@ -92,12 +143,27 @@ def _find_operations(node) -> list[IRNode]:
                     nodes.append(loop)
                     return nodes
                     
-                elif prop in ('includes', 'indexOf'):
+                elif prop == 'shift':
+                    nodes.append(DataStructureOpNode(structure_type='list', op='pop', position='front'))
+                elif prop == 'unshift':
+                    nodes.append(DataStructureOpNode(structure_type='list', op='insert', position='front'))
+                elif prop == 'push':
+                    nodes.append(DataStructureOpNode(structure_type='list', op='append', position='back'))
+                elif prop == 'pop':
+                    nodes.append(DataStructureOpNode(structure_type='list', op='pop', position='back'))
+                elif prop in ('includes', 'indexOf', 'lastIndexOf'):
                     receiver = func.children[0]
                     nodes.extend(_find_operations(receiver))
-                    
                     nodes.append(BuiltinCallNode(name='includes', receiver_type='array'))
                     return nodes
+                elif prop in ('splice', 'slice', 'concat', 'join', 'split', 'replace', 'sort', 'reverse'):
+                    nodes.append(BuiltinCallNode(name=prop, receiver_type='array'))
+                    
+            # Check Object.keys/values
+            obj_node = func.children[0]
+            if obj_node.type == 'identifier' and obj_node.text.decode('utf8') == 'Object':
+                if prop_node and prop_node.text.decode('utf8') in ('keys', 'values', 'entries'):
+                    nodes.append(BuiltinCallNode(name='keys', receiver_type='object'))
                     
     for child in node.children:
          nodes.extend(_find_operations(child))

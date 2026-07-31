@@ -17,6 +17,8 @@ def analyze_complexity(func_node: FunctionNode) -> dict:
         c = "O(1)"
     elif max_power == 0.5:
         c = "O(log n)"
+    elif max_power == 0.6:
+        c = "O(sqrt n)"
     elif max_power == 1:
         c = "O(n)"
     elif max_power == 1.5:
@@ -34,6 +36,8 @@ def _analyze_block(nodes: list[IRNode], tags: set) -> int:
             loop_power = 1
             if node.bound_type == 'log':
                 loop_power = 0.5
+            elif node.bound_type == 'sqrt':
+                loop_power = 0.6
             elif node.bound_type in ('amortized', 'const'):
                 loop_power = 0
             power = loop_power + body_power

@@ -53,6 +53,10 @@ def _detect_loop_bound_type(loop_ts_node, enclosing_block_ts_node=None, is_inner
     if not cond_vars:
         return 'linear', None
 
+    cond_text = condition_node.text.decode('utf8')
+    if re.search(r'\b([a-zA-Z_]\w*)\s*\*\s*\1\s*<=', cond_text) or re.search(r'\b([a-zA-Z_]\w*)\s*\*\*\s*2\s*<=', cond_text):
+        return 'sqrt', None
+
     block = _get_child_by_type(loop_ts_node, 'block')
     if not block:
         return 'linear', None
@@ -666,7 +670,8 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
                             branch, is_fac, _, _ = get_recursive_calls(target_block, attr_name)
                             if branch > 0:
                                 t_dp_dim = len(t_params) if t_params else 1
-                                inlined.append(RecursiveCallNode(branch_factor=branch, is_memoized=False, arg_reduction='unknown', is_factorial=is_fac, dp_dimension=t_dp_dim))
+                                arg_red = 'halving' if _calls_use_halving_arg(target_block, attr_name) else 'unknown'
+                                inlined.append(RecursiveCallNode(branch_factor=branch, is_memoized=False, arg_reduction=arg_red, is_factorial=is_fac, dp_dimension=t_dp_dim))
                             nodes.extend(inlined)
                             return nodes
                             
@@ -692,7 +697,7 @@ def _find_operations(node, params=None, accessed_attributes=None, dict_vars=None
                     arg_count = sum(1 for c in args_node.children if c.type not in ('(', ')', ',', 'comment'))
                 if arg_count < 2:
                     nodes.append(BuiltinCallNode(name=func_name))
-            elif func_name in ('sorted', 'sum', 'all', 'any', 'heappush', 'heappop'):
+            elif func_name in ('sorted', 'sum', 'all', 'any', 'heappush', 'heappop', 'Counter', 'zip', 'map', 'filter', 'list', 'set', 'reversed'):
                 nodes.append(BuiltinCallNode(name=func_name))
                 
     if node.type in ('list_comprehension', 'set_comprehension', 'dictionary_comprehension', 'generator_expression'):
